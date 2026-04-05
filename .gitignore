@@ -1,0 +1,32 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# MacOS
+.DS_Store
+
+# Logs
+*.log
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/
+build/
+*.egg-info/

@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GazeSync — Attention Intelligence</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #080c10;
+    --surface:  #0e1419;
+    --border:   #1c2530;
+    --accent:   #00e5a0;
+    --warn:     #ff6b35;
+    --info:     #3b9dff;
+    --muted:    #3a4858;
+    --text:     #c8d6e0;
+    --text-dim: #5a6e7f;
+    --font-ui:  'Syne', sans-serif;
+    --font-mono:'Space Mono', monospace;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); overflow: hidden; }
+
+  /* ── GRID ──────────────────────────────────── */
+  .grid {
+    display: grid;
+    height: 100vh;
+    grid-template-columns: 280px 1fr 260px;
+    grid-template-rows: 56px 1fr 36px;
+    grid-template-areas:
+      "header  header  header"
+      "sidebar feed    panel"
+      "footer  footer  footer";
+    gap: 1px;
+    background: var(--border);
+  }
+
+  /* ── HEADER ─────────────────────────────────── */
+  header {
+    grid-area: header;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 6px var(--accent); }
+    50%      { box-shadow: 0 0 18px var(--accent), 0 0 30px var(--accent)55; }
+  }
+  .logo-name { font-size: 17px; font-weight: 800; letter-spacing: 2px; color: #fff; }
+  .logo-sub  { font-size: 10px; color: var(--text-dim); letter-spacing: 3px; margin-top: 1px; }
+  .spacer { flex: 1; }
+  .header-badge {
+    font-family: var(--font-mono); font-size: 10px;
+    padding: 4px 10px; border: 1px solid var(--border);
+    color: var(--text-dim); letter-spacing: 1px;
+  }
+  #conn-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+  }
+  #conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  #conn-dot.live { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  /* ── SIDEBAR ─────────────────────────────────── */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 14px;
+    overflow: hidden;
+  }
+  .section-label {
+    font-size: 9px; letter-spacing: 3px; color: var(--text-dim);
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+
+  /* state card */
+  .state-card {
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .3s;
+  }
+  .state-card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--card-accent, var(--muted));
+    transition: background .3s;
+  }
+  .state-name {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--card-accent, var(--text-dim));
+    text-transform: uppercase;
+    transition: color .3s;
+  }
+  .state-desc { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
+
+  /* metric rows */
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--border); padding: 7px 0;
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
+  .metric-val {
+    font-family: var(--font-mono); font-size: 13px; color: #fff;
+    transition: color .2s;
+  }
+  .metric-val.warn { color: var(--warn); }
+  .metric-val.info { color: var(--info); }
+
+  /* bar graph */
+  .bar-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .bar-item { display: flex; flex-direction: column; gap: 3px; }
+  .bar-header { display: flex; justify-content: space-between; }
+  .bar-label  { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; }
+  .bar-value  { font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); }
+  .bar-track  { height: 4px; background: var(--border); position: relative; overflow: hidden; }
+  .bar-fill   { height: 100%; width: 0; transition: width .25s ease, background .3s; }
+
+  /* ── FEED ────────────────────────────────────── */
+  .feed {
+    grid-area: feed;
+    background: #000;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  #video-stream { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .feed-overlay-tl {
+    position: absolute; top: 12px; left: 12px;
+    font-family: var(--font-mono); font-size: 9px; color: rgba(255,255,255,.3);
+    letter-spacing: 1px; pointer-events: none;
+  }
+  /* alert glow border */
+  .feed.alert-active { box-shadow: inset 0 0 0 3px var(--warn); animation: glow-border .6s ease-in-out infinite alternate; }
+  @keyframes glow-border {
+    from { box-shadow: inset 0 0 0 3px var(--warn)88; }
+    to   { box-shadow: inset 0 0 0 4px var(--warn), 0 0 40px var(--warn)33; }
+  }
+
+  /* ── RIGHT PANEL ─────────────────────────────── */
+  .panel {
+    grid-area: panel;
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    padding: 16px; gap: 14px; overflow: hidden;
+  }
+
+  /* compass */
+  .compass-wrap { display: flex; justify-content: center; }
+  .compass-svg  { overflow: visible; }
+
+  /* alert timer */
+  .alert-timer { display: none; }
+  .alert-timer.active { display: block; }
+  .timer-track {
+    height: 6px; background: var(--border); position: relative; margin-top: 6px;
+  }
+  .timer-fill {
+    height: 100%; width: 0; background: var(--warn);
+    box-shadow: 0 0 8px var(--warn);
+    transition: width .25s linear;
+  }
+  .timer-label { font-size: 9px; color: var(--text-dim); letter-spacing: 2px; margin-top: 4px; }
+
+  /* log */
+  .log-scroll {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse;
+    gap: 4px; min-height: 0;
+  }
+  .log-scroll::-webkit-scrollbar { width: 2px; }
+  .log-scroll::-webkit-scrollbar-thumb { background: var(--muted); }
+  .log-entry {
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-dim);
+    padding: 3px 0; border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px;
+  }
+  .log-time { color: var(--muted); }
+  .log-msg.warn { color: var(--warn); }
+  .log-msg.ok   { color: var(--accent); }
+
+  /* ── FOOTER ──────────────────────────────────── */
+  footer {
+    grid-area: footer;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+  #fps-display { color: var(--accent); }
+
+  /* ── No-face notice ──────────────────────────── */
+  #noface-notice {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(10,15,20,.85); border: 1px solid var(--border);
+    padding: 8px 20px; font-size: 11px; color: var(--text-dim);
+    letter-spacing: 1px; display: none;
+  }
+</style>
+</head>
+<body>
+<div class="grid">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      <div>
+        <div class="logo-name">GAZESYNC</div>
+        <div class="logo-sub">ATTENTION INTELLIGENCE</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="header-badge">v2.0 · MEDIAPIPE</div>
+    <div id="conn-indicator">
+      <div id="conn-dot"></div>
+      <span id="conn-label">CONNECTING</span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div>
+      <div class="section-label">Current State</div>
+      <div class="state-card" id="state-card" style="--card-accent: var(--muted)">
+        <div class="state-name" id="state-name">–</div>
+        <div class="state-desc" id="state-desc">Waiting for face detection…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Gaze Metrics</div>
+      <div class="metric-row">
+        <span class="metric-label">IRIS DX</span>
+        <span class="metric-val" id="m-dx">–</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">IRIS DY</span>
+        <span class="metric-val" id="m-dy">–</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">HEAD PITCH</span>
+        <span class="metric-val info" id="m-pitch">–</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">HEAD YAW</span>
+        <span class="metric-val info" id="m-yaw">–</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">GAZE H</span>
+        <span class="metric-val" id="m-gh">–</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">GAZE V</span>
+        <span class="metric-val" id="m-gv">–</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Activity Bars</div>
+      <div class="bar-wrap">
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-label">HORIZONTAL</span><span class="bar-value" id="bar-h-val">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-h" style="background:var(--accent)"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-label">VERTICAL</span><span class="bar-value" id="bar-v-val">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-v" style="background:var(--info)"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-label">PITCH AMP</span><span class="bar-value" id="bar-p-val">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-p" style="background:#9b7dff"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-label">YAW AMP</span><span class="bar-value" id="bar-y-val">0%</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bar-y" style="background:#ff9f40"></div></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- VIDEO FEED -->
+  <section class="feed" id="feed-area">
+    <img id="video-stream" src="/video_feed" alt="live feed">
+    <div class="feed-overlay-tl" id="feed-ts">LIVE · 00:00:00</div>
+    <div id="noface-notice">NO FACE DETECTED — ALIGN WITH CAMERA</div>
+  </section>
+
+  <!-- RIGHT PANEL -->
+  <aside class="panel">
+    <div>
+      <div class="section-label">Gaze Compass</div>
+      <div class="compass-wrap">
+        <svg class="compass-svg" width="200" height="200" viewBox="-110 -110 220 220">
+          <!-- rings -->
+          <circle r="100" fill="none" stroke="#1c2530" stroke-width="1"/>
+          <circle r="66"  fill="none" stroke="#1c2530" stroke-width="1" stroke-dasharray="3,3"/>
+          <circle r="33"  fill="none" stroke="#1c2530" stroke-width="1"/>
+          <!-- axes -->
+          <line x1="-100" y1="0" x2="100" y2="0" stroke="#1c2530" stroke-width="1"/>
+          <line x1="0" y1="-100" x2="0" y2="100" stroke="#1c2530" stroke-width="1"/>
+          <!-- labels -->
+          <text x="0"  y="-106" text-anchor="middle" font-size="8" fill="#3a4858" font-family="Space Mono,monospace">UP</text>
+          <text x="0"  y="114"  text-anchor="middle" font-size="8" fill="#3a4858" font-family="Space Mono,monospace">DOWN</text>
+          <text x="-108" y="4" text-anchor="middle" font-size="8" fill="#3a4858" font-family="Space Mono,monospace">L</text>
+          <text x="108"  y="4" text-anchor="middle" font-size="8" fill="#3a4858" font-family="Space Mono,monospace">R</text>
+          <!-- zones (phone / side) -->
+          <rect x="-100" y="20" width="200" height="80" fill="#3b9dff08"/>
+          <rect x="20"   y="-100" width="80" height="200" fill="#ff6b3508"/>
+          <rect x="-100" y="-100" width="80" height="200" fill="#ff6b3508"/>
+          <!-- gaze dot -->
+          <circle id="gaze-dot" cx="0" cy="0" r="9" fill="#00e5a0" opacity=".85"/>
+          <circle id="gaze-ring" cx="0" cy="0" r="14" fill="none" stroke="#00e5a0" stroke-width="1" opacity=".4"/>
+          <!-- centre -->
+          <circle cx="0" cy="0" r="3" fill="#fff" opacity=".4"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="alert-timer" id="alert-timer">
+      <div class="section-label">Alert Countdown</div>
+      <div class="timer-track"><div class="timer-fill" id="timer-fill"></div></div>
+      <div class="timer-label" id="timer-label">0.0 / 2.5 s</div>
+    </div>
+
+    <div style="flex:1; min-height:0; display:flex; flex-direction:column;">
+      <div class="section-label">Event Log</div>
+      <div class="log-scroll" id="event-log"></div>
+    </div>
+  </aside>
+
+  <!-- FOOTER -->
+  <footer>
+    <span>GAZESYNC · MEDIAPIPE FACE MESH · IRIS TRACKING</span>
+    <span><span id="fps-display">–</span> FPS</span>
+    <span id="footer-ts">–</span>
+  </footer>
+</div>
+
+<script>
+const POLL_MS   = 120;
+const ALERT_SEC = 2.5;
+
+const STATE_META = {
+  focused:               { color: '#00e5a0', label: 'FOCUSED',          desc: 'User attention is directed at primary screen.' },
+  looking_down:          { color: '#ff6b35', label: 'PHONE DETECTED',   desc: 'Head pitched down or iris displaced — possible phone use.' },
+  looking_sideways_left: { color: '#ffa535', label: 'SECONDARY SCREEN', desc: 'Gaze shifted left — possible secondary monitor.' },
+  looking_sideways_right:{ color: '#ffa535', label: 'SECONDARY SCREEN', desc: 'Gaze shifted right — possible secondary monitor.' },
+  looking_up:            { color: '#5050ff', label: 'DISTRACTED (UP)',  desc: 'Head tilted back or upward gaze detected.' },
+  no_face:               { color: '#3a4858', label: 'NO FACE',          desc: 'Face not detected. Check camera position.' },
+  initializing:          { color: '#3a4858', label: 'INITIALIZING',     desc: 'Starting up camera and model…' },
+};
+
+let lastStatus = null;
+let logEntries = [];
+const MAX_LOG  = 80;
+
+function ts() {
+  return new Date().toLocaleTimeString('en', { hour12: false });
+}
+
+function addLog(msg, cls='') {
+  const entry = { time: ts(), msg, cls };
+  logEntries.unshift(entry);
+  if (logEntries.length > MAX_LOG) logEntries.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('event-log');
+  el.innerHTML = logEntries.map(e =>
+    `<div class="log-entry"><span class="log-time">${e.time}</span><span class="log-msg ${e.cls}">${e.msg}</span></div>`
+  ).join('');
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function pct(v, max) { return Math.round(clamp(Math.abs(v) / max, 0, 1) * 100); }
+
+let firstData = false;
+
+async function poll() {
+  try {
+    const r = await fetch('/status');
+    const d = await r.json();
+
+    if (!firstData) {
+      firstData = true;
+      document.getElementById('conn-dot').classList.add('live');
+      document.getElementById('conn-label').textContent = 'LIVE';
+      addLog('Connection established.', 'ok');
+    }
+
+    const meta  = STATE_META[d.status] || STATE_META.initializing;
+
+    // state card
+    document.getElementById('state-card').style.setProperty('--card-accent', meta.color);
+    document.getElementById('state-name').textContent = meta.label;
+    document.getElementById('state-desc').textContent  = meta.desc;
+
+    // log transitions
+    if (d.status !== lastStatus) {
+      const cls = d.status === 'focused' ? 'ok' : (d.status === 'no_face' ? '' : 'warn');
+      addLog(`→ ${meta.label}`, cls);
+      lastStatus = d.status;
+    }
+    if (d.alert && lastStatus !== 'alert_fired') {
+      addLog('⚠ ALERT TRIGGERED', 'warn');
+    }
+
+    // metrics
+    const set = (id, val, fmt) => document.getElementById(id).textContent = fmt(val);
+    set('m-dx',   d.dx,    v => v.toFixed(3));
+    set('m-dy',   d.dy,    v => v.toFixed(3));
+    set('m-pitch',d.pitch, v => v.toFixed(1)+'°');
+    set('m-yaw',  d.yaw,   v => v.toFixed(1)+'°');
+    set('m-gh',   d.gaze_h,v => v.toFixed(3));
+    set('m-gv',   d.gaze_v,v => v.toFixed(3));
+
+    // bars
+    const setBar = (id, valId, v, max) => {
+      const p = pct(v, max);
+      document.getElementById(id).style.width = p + '%';
+      document.getElementById(valId).textContent = p + '%';
+      document.getElementById(id).style.background =
+        p > 70 ? 'var(--warn)' : (document.getElementById(id).style.background || '');
+    };
+    setBar('bar-h','bar-h-val', d.gaze_h, 0.6);
+    setBar('bar-v','bar-v-val', d.gaze_v, 0.6);
+    setBar('bar-p','bar-p-val', d.pitch,  30);
+    setBar('bar-y','bar-y-val', d.yaw,    35);
+
+    // compass
+    const gx = clamp(d.gaze_h, -1, 1) * 86;
+    const gy = clamp(d.gaze_v, -1, 1) * 86;
+    const dot  = document.getElementById('gaze-dot');
+    const ring = document.getElementById('gaze-ring');
+    dot.setAttribute('cx', gx.toFixed(1));
+    dot.setAttribute('cy', gy.toFixed(1));
+    ring.setAttribute('cx', gx.toFixed(1));
+    ring.setAttribute('cy', gy.toFixed(1));
+    dot.setAttribute('fill',   meta.color);
+    ring.setAttribute('stroke', meta.color);
+
+    // feed alert border
+    const feed = document.getElementById('feed-area');
+    feed.classList.toggle('alert-active', d.alert);
+
+    // alert timer
+    const timerEl = document.getElementById('alert-timer');
+    const fillEl  = document.getElementById('timer-fill');
+    const lblEl   = document.getElementById('timer-label');
+    const hasDist = ['looking_down','looking_sideways_left','looking_sideways_right','looking_up'].includes(d.status);
+    timerEl.classList.toggle('active', hasDist);
+    if (hasDist) {
+      const prog = clamp(d.alert_elapsed / ALERT_SEC, 0, 1) * 100;
+      fillEl.style.width = prog + '%';
+      lblEl.textContent = `${d.alert_elapsed.toFixed(1)} / ${ALERT_SEC} s`;
+    }
+
+    // fps + ts
+    document.getElementById('fps-display').textContent = d.fps || '–';
+    document.getElementById('footer-ts').textContent   = ts();
+
+    // no-face notice
+    document.getElementById('noface-notice').style.display =
+      d.status === 'no_face' ? 'block' : 'none';
+
+    // live feed clock
+    document.getElementById('feed-ts').textContent = `LIVE · ${ts()}`;
+
+  } catch(e) {
+    document.getElementById('conn-dot').classList.remove('live');
+    document.getElementById('conn-label').textContent = 'DISCONNECTED';
+  }
+}
+
+setInterval(poll, POLL_MS);
+poll();
+</script>
+</body>
+</html>
